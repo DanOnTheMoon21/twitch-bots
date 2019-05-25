@@ -2,7 +2,7 @@
 
 const wreck = require('@hapi/wreck');
 
-async function getJoke() {
+async function getJoke () {
   const resp = await wreck.get('https://icanhazdadjoke.com', {
     headers: {
       Accept: 'application/json'
@@ -13,7 +13,7 @@ async function getJoke() {
   const { status, joke } = resp.payload;
 
   if (status !== 200) {
-    throw new Error(`Error getting joke: status ${status}`)
+    throw new Error(`Error getting joke: status ${status}`);
   }
 
   return joke;
@@ -37,7 +37,7 @@ async function onMessage (channel, userstate, message) {
       return;
     }
 
-    return await this.say(channel, joke);
+    return this.say(channel, joke);
   }
 }
 

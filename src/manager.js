@@ -64,7 +64,7 @@ class Manager {
     }
 
     this.log('exec', 'executing action for bot', { botName, botAction, args });
-    return await this.bots[botName][botAction](...args);
+    return this.bots[botName][botAction](...args);
   }
 
   statusForBot (botName) {
