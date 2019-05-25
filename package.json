@@ -33,6 +33,7 @@
     "snazzy": "^8.0.0"
   },
   "dependencies": {
+    "@hapi/wreck": "^15.0.1",
     "commander": "^2.20.0",
     "js-yaml": "^3.13.1",
     "tmi.js": "^1.4.2",

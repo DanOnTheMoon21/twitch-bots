@@ -7,9 +7,7 @@ function error (action, msg, err, other = {}) {
     action,
     msg,
     isError: true,
-    err: {
-      ...err
-    },
+    err: JSON.stringify(err, Object.getOwnPropertyNames(err)),
     ...other,
     time: Date.now()
   });

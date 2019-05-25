@@ -7,3 +7,4 @@ process.on('unhandledRejection', err => {
 
 const Manager = require('./src/manager');
 const manager = new Manager();
+
