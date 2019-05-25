@@ -1,6 +1,10 @@
 'use strict';
 
 const Tmi = require('tmi.js');
+const { resolve, isAbsolute } = require('path');
+
+const log = require('./log');
+const error = require('./error');
 
 async function noop () {}
 
@@ -15,15 +19,18 @@ class TwitchBot {
     this.token = token;
     this.channels = channels;
     this.onMessageHandler = onMessage.bind(this);
-    this.logFilename = logFile;
+    this._log = log.bind(this);
+    this._error = error.bind(this);
 
     // create log file
-    // @todo
+    this.logFile = isAbsolute(logFile)
+      ? logFile : resolve(process.cwd(), logFile);
 
     // create client
     // eslint-disable-next-line new-cap
     this.client = new Tmi.client({
       connection: {
+        reconnect: true,
         secure: true
       },
       identity: {
@@ -41,7 +48,7 @@ class TwitchBot {
       messagesSent: 0,
       logs: 0,
       errors: 0,
-      timeLast: {
+      time: {
         connected: undefined,
         init: Date.now(),
         disconnected: undefined,
@@ -64,8 +71,11 @@ class TwitchBot {
     }
 
     // update state
-    this.time.messageSeen = Date.now();
-    this.messagesSeen++;
+    this.state.time.messageSeen = Date.now();
+    this.state.messagesSeen++;
+
+    // log message
+    this.log('onMessage', 'message received', { channel, userstate, message });
 
     // @todo: add helper message parsing, etc
 
@@ -76,18 +86,23 @@ class TwitchBot {
   // this should never be called, since we should always explicitly
   // connect and disconnect. this listener will be removed prior to
   // disconnecting manually.
-  //
-  // however, its bound to happen, so reconnect if it does
   async onDisconnected (reason) {
     // cleanup state
-    this.time.disconnected = Date.now();
+    this.state.time.disconnected = Date.now();
     this.state.connected = false;
 
     // log
     this.error('onDisconnected', reason, new Error('unexpectedly disconnected'));
+  }
 
-    // reconnect
-    await this.connect();
+  // cleanup state if reconnecting
+  async onConnected (address, port) {
+    // cleanup state
+    this.state.time.connected = Date.now();
+    this.state.connected = true;
+
+    // log
+    this.log('onConnected', 'connected', { address, port });
   }
 
   async connect () {
@@ -98,9 +113,9 @@ class TwitchBot {
     }
 
     // connect
-    let connectionInfo;
+    let server, port;
     try {
-      connectionInfo = await this.client.connect();
+      ([server, port] = await this.client.connect());
     } catch (err) {
       this.error('connect', 'connection not started: failed to connect', err);
       return;
@@ -108,13 +123,13 @@ class TwitchBot {
 
     // update state
     this.state.time.connected = Date.now();
-    this.connected = true;
+    this.state.connected = true;
 
     // register listeners
     await this.listen();
 
-    this.log('connect', 'connection started', connectionInfo);
-    return connectionInfo;
+    this.log('connect', 'connection started', { server, port });
+    return { server, port };
   }
 
   async disconnect () {
@@ -128,9 +143,9 @@ class TwitchBot {
     await this.dontlisten();
 
     // disconnect
-    let connectionInfo;
+    let server, port;
     try {
-      connectionInfo = await this.client.disconnect();
+      ([server, port] = await this.client.disconnect());
     } catch (err) {
       this.error('disconnect', 'connection not terminated: failed to disconnect', err);
       return;
@@ -138,10 +153,10 @@ class TwitchBot {
 
     // update state
     this.state.time.disconnected = Date.now();
-    this.connected = false;
+    this.state.connected = false;
 
-    this.log('disconnect', 'connection terminated', connectionInfo);
-    return connectionInfo;
+    this.log('disconnect', 'connection terminated', { server, port });
+    return { server, port };
   }
 
   async listen () {
@@ -151,14 +166,21 @@ class TwitchBot {
       return;
     }
 
+    // make sure bound correctly
+    this._onDisconnected = this.onDisconnected.bind(this);
+    this._onMessage = this.onMessage.bind(this);
+    this._onConnected = this.onConnected.bind(this);
+
     // listeners
-    this.client.on('disconnected', this.onDisconnected);
-    this.client.on('message', this.onMessage);
+    this.client.on('disconnected', this._onDisconnected);
+    this.client.on('message', this._onMessage);
+    this.client.on('connected', this._onConnected);
 
     // update state
     this.state.listening = true;
     this.state.time.listen = Date.now();
 
+    this.log('listen', 'listen started');
     return this;
   }
 
@@ -170,13 +192,15 @@ class TwitchBot {
     }
 
     // remove listeners
-    this.client.removeListener('disconnected', this.onDisconnected);
-    this.client.removeListener('message', this.onMessage);
+    this.client.removeListener('disconnected', this._onDisconnected);
+    this.client.removeListener('message', this._onMessage);
+    this.client.removeListener('connected', this._onConnected);
 
     // update state
     this.state.listening = false;
     this.state.time.dontlisten = Date.now();
 
+    this.log('dontlisten', 'listen stopped');
     return this;
   }
 
@@ -210,33 +234,20 @@ class TwitchBot {
     return sayInfo;
   }
 
-  log (action, msg, other = {}) {
+  log (action, msg, other) {
     // update state
     this.state.time.log = Date.now();
     this.state.logs++;
 
-    // print message
-    console.log(JSON.stringify({
-      action,
-      msg,
-      ...other,
-      time: Date.now()
-    }));
+    this._log(action, msg, other);
   }
 
-  error (action, msg, err, other = {}) {
+  error (action, msg, err, other) {
     // update state
     this.state.time.error = Date.now();
     this.state.errors++;
 
-    // print error
-    console.error(JSON.stringify({
-      action,
-      msg,
-      err,
-      ...other,
-      time: Date.now()
-    }));
+    this._error(action, msg, err, other);
   }
 }
 

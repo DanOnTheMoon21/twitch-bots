@@ -5,6 +5,7 @@
   "description": "My personal one-off twitch bots",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "npm run lint && echo \"No tests have been written :(\"; exit 1",
     "lint": "semistandard --verbose | snazzy",
     "lint:fix": "semistandard --fix --verbose | snazzy"
